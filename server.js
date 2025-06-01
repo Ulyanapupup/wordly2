@@ -1,272 +1,156 @@
 const express = require('express');
-const WebSocket = require('ws');
-const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+const io = new Server(server);
 
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Create HTTP server
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// WebSocket server
-const wss = new WebSocket.Server({ server });
+app.use(express.static('public'));
 
 const rooms = {};
-const players = {};
 
-wss.on('connection', (ws) => {
-  let playerId = generateId();
-  players[playerId] = { ws, room: null, isReady: false, word: null, isTurn: false };
-  
-  console.log(`New connection: ${playerId}`);
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id}`);
 
-  ws.on('message', (message) => {
-    const data = JSON.parse(message);
-    handleMessage(playerId, data);
+  socket.on('createRoom', () => {
+    const roomId = generateRoomId();
+    rooms[roomId] = {
+      players: [socket.id],
+      words: {},
+      guesses: [],
+      currentTurn: 0,
+      gameOver: false,
+    };
+    socket.join(roomId);
+    socket.emit('roomCreated', roomId);
   });
 
-  ws.on('close', () => {
-    handleDisconnect(playerId);
+  socket.on('joinRoom', (roomId) => {
+    const room = rooms[roomId];
+    if (room && room.players.length === 1) {
+      room.players.push(socket.id);
+      socket.join(roomId);
+      io.to(roomId).emit('roomJoined', roomId);
+    } else {
+      socket.emit('error', 'Room is full or does not exist.');
+    }
   });
 
-  // Send initial connection info
-  ws.send(JSON.stringify({
-    type: 'connection',
-    playerId
-  }));
+  socket.on('submitWord', ({ roomId, word }) => {
+    const room = rooms[roomId];
+    if (room) {
+      room.words[socket.id] = word.toLowerCase();
+      if (Object.keys(room.words).length === 2) {
+        io.to(roomId).emit('startGame');
+      }
+    }
+  });
+
+  socket.on('makeGuess', ({ roomId, guess }) => {
+    const room = rooms[roomId];
+    if (room && !room.gameOver) {
+      const opponentId = room.players.find((id) => id !== socket.id);
+      const opponentWord = room.words[opponentId];
+      const result = evaluateGuess(guess.toLowerCase(), opponentWord);
+      room.guesses.push({ player: socket.id, guess, result });
+      io.to(roomId).emit('guessMade', { player: socket.id, guess, result });
+
+      if (guess.toLowerCase() === opponentWord) {
+        room.gameOver = true;
+        io.to(roomId).emit('gameOver', {
+          winner: socket.id,
+          words: room.words,
+        });
+      } else {
+        room.currentTurn = (room.currentTurn + 1) % 2;
+        io.to(roomId).emit('nextTurn', room.players[room.currentTurn]);
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+    for (const roomId in rooms) {
+      const room = rooms[roomId];
+      if (room.players.includes(socket.id)) {
+        io.to(roomId).emit('playerDisconnected');
+        delete rooms[roomId];
+        break;
+      }
+    }
+  });
 });
 
-function generateId() {
-  return Math.random().toString(36).substr(2, 9);
+function generateRoomId() {
+  return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
-function handleMessage(playerId, data) {
-  const player = players[playerId];
-  if (!player) return;
+function evaluateGuess(guess, target) {
+  const result = [];
+  const targetLetters = target.split('');
+  const guessLetters = guess.split('');
 
-  switch (data.type) {
-    case 'createRoom':
-      createRoom(playerId);
-      break;
-    case 'joinRoom':
-      joinRoom(playerId, data.roomId);
-      break;
-    case 'setWord':
-      setWord(playerId, data.word);
-      break;
-    case 'submitGuess':
-      submitGuess(playerId, data.guess);
-      break;
-    case 'submitFeedback':
-      submitFeedback(playerId, data.feedback);
-      break;
-  }
-}
-
-function createRoom(playerId) {
-  const roomId = generateId();
-  rooms[roomId] = {
-    players: [playerId],
-    gameState: 'waiting',
-    currentTurn: null
-  };
-  
-  players[playerId].room = roomId;
-  
-  sendToPlayer(playerId, {
-    type: 'roomCreated',
-    roomId
-  });
-  
-  console.log(`Room created: ${roomId}`);
-}
-
-function joinRoom(playerId, roomId) {
-  const room = rooms[roomId];
-  if (!room || room.players.length >= 2) {
-    sendToPlayer(playerId, {
-      type: 'joinError',
-      message: 'Room is full or does not exist'
-    });
-    return;
-  }
-
-  room.players.push(playerId);
-  players[playerId].room = roomId;
-  
-  // Notify both players
-  room.players.forEach(pId => {
-    sendToPlayer(pId, {
-      type: 'playerJoined',
-      roomId,
-      players: room.players.map(p => ({
-        id: p,
-        isReady: players[p].isReady
-      }))
-    });
-  });
-  
-  console.log(`Player ${playerId} joined room ${roomId}`);
-}
-
-function setWord(playerId, word) {
-  const player = players[playerId];
-  if (!player || !player.room) return;
-
-  player.word = word.toUpperCase();
-  player.isReady = true;
-  
-  const room = rooms[player.room];
-  const allReady = room.players.every(pId => players[pId].isReady);
-  
-  // Notify all players in room about readiness
-  room.players.forEach(pId => {
-    sendToPlayer(pId, {
-      type: 'playerReady',
-      playerId,
-      allReady
-    });
-  });
-  
-  // If both ready, start game
-  if (allReady && room.gameState === 'waiting') {
-    startGame(room);
-  }
-}
-
-function startGame(room) {
-  room.gameState = 'playing';
-  room.currentTurn = room.players[0]; // First player starts
-  players[room.players[0]].isTurn = true;
-  players[room.players[1]].isTurn = false;
-  
-  room.players.forEach(pId => {
-    sendToPlayer(pId, {
-      type: 'gameStarted',
-      yourTurn: players[pId].isTurn
-    });
-  });
-}
-
-function submitGuess(playerId, guess) {
-  const player = players[playerId];
-  if (!player || !player.room || !player.isTurn) return;
-
-  const room = rooms[player.room];
-  const opponentId = room.players.find(pId => pId !== playerId);
-  
-  if (!opponentId) return;
-  
-  // Send guess to opponent for feedback
-  players[opponentId].isTurn = true;
-  player.isTurn = false;
-  
-  sendToPlayer(opponentId, {
-    type: 'receiveGuess',
-    guess: guess.toUpperCase(),
-    guesserId: playerId
-  });
-  
-  // Also show the guess to the guesser
-  sendToPlayer(playerId, {
-    type: 'showGuess',
-    guess: guess.toUpperCase(),
-    isOpponent: false
-  });
-}
-
-function submitFeedback(playerId, feedback) {
-  const player = players[playerId];
-  if (!player || !player.room || !player.isTurn) return;
-
-  const room = rooms[player.room];
-  const guesserId = room.players.find(pId => pId !== playerId);
-  
-  if (!guesserId) return;
-  
-  // Check if the guess was correct
-  const guess = feedback.guess;
-  const isCorrect = guess === player.word;
-  
-  // Send feedback to guesser
-  sendToPlayer(guesserId, {
-    type: 'receiveFeedback',
-    feedback: feedback.colors,
-    isCorrect
-  });
-  
-  // Also show the feedback to the feedback giver
-  sendToPlayer(playerId, {
-    type: 'showGuess',
-    guess: guess,
-    isOpponent: true,
-    feedback: feedback.colors
-  });
-  
-  if (isCorrect) {
-    // Game over
-    endGame(room, guesserId);
-  } else {
-    // Switch turns
-    players[guesserId].isTurn = true;
-    player.isTurn = false;
-    
-    sendToPlayer(guesserId, {
-      type: 'yourTurn'
-    });
-  }
-}
-
-function endGame(room, winnerId) {
-  room.gameState = 'finished';
-  
-  const loserId = room.players.find(pId => pId !== winnerId);
-  const winnerWord = players[winnerId].word;
-  const loserWord = players[loserId].word;
-  
-  room.players.forEach(pId => {
-    sendToPlayer(pId, {
-      type: 'gameOver',
-      winnerId,
-      winnerWord,
-      loserWord
-    });
-  });
-}
-
-function handleDisconnect(playerId) {
-  const player = players[playerId];
-  if (!player) return;
-
-  if (player.room) {
-    const room = rooms[player.room];
-    if (room) {
-      // Notify other player
-      const otherPlayerId = room.players.find(pId => pId !== playerId);
-      if (otherPlayerId) {
-        sendToPlayer(otherPlayerId, {
-          type: 'opponentDisconnected'
-        });
-      }
-      
-      // Clean up room
-      delete rooms[player.room];
+  // First pass: correct letters in correct positions
+  for (let i = 0; i < 5; i++) {
+    if (guessLetters[i] === targetLetters[i]) {
+      result.push('green');
+      targetLetters[i] = null;
+      guessLetters[i] = null;
+    } else {
+      result.push(null);
     }
   }
-  
-  // Clean up player
-  delete players[playerId];
-  console.log(`Player disconnected: ${playerId}`);
+
+  // Second pass: correct letters in wrong positions
+  for (let i = 0; i < 5; i++) {
+    if (guessLetters[i]) {
+      const index = targetLetters.indexOf(guessLetters[i]);
+      if (index !== -1) {
+        result[i] = 'yellow';
+        targetLetters[index] = null;
+      } else {
+        result[i] = 'gray';
+      }
+    }
+  }
+
+  return result;
 }
 
-function sendToPlayer(playerId, message) {
-  const player = players[playerId];
-  if (player && player.ws.readyState === WebSocket.OPEN) {
-    player.ws.send(JSON.stringify(message));
+// Добавим новое событие в io.on('connection')
+socket.on('submitEvaluation', ({ roomId, evaluation }) => {
+  const room = rooms[roomId];
+  if (room && !room.gameOver) {
+    const lastGuess = room.guesses[room.guesses.length - 1];
+    lastGuess.result = evaluation;
+    
+    io.to(roomId).emit('guessEvaluated', {
+      guess: lastGuess.guess,
+      evaluation: evaluation
+    });
+    
+    room.currentTurn = (room.currentTurn + 1) % 2;
+    io.to(roomId).emit('nextTurn', room.players[room.currentTurn]);
   }
-}
+});
+
+// Изменим обработчик makeGuess
+socket.on('makeGuess', ({ roomId, guess }) => {
+  const room = rooms[roomId];
+  if (room && !room.gameOver) {
+    const opponentId = room.players.find((id) => id !== socket.id);
+    room.guesses.push({ player: socket.id, guess: guess.toLowerCase(), result: null });
+    
+    // Отправляем догадку оппоненту для оценки
+    socket.to(opponentId).emit('opponentGuess', guess.toLowerCase());
+    
+    // Уведомляем игрока, что его догадка отправлена на оценку
+    socket.emit('guessSent');
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});

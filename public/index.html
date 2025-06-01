@@ -1,500 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wordly Game</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        .screen {
-            display: none;
-        }
-        
-        .screen.active {
-            display: block;
-        }
-        
-        #lobbyScreen, #wordInputScreen {
-            text-align: center;
-        }
-        
-        #gameContainer {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        
-        .gameHalf {
-            border: 1px solid #ccc;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        
-        .guessArea {
-            margin-bottom: 15px;
-        }
-        
-        .letter {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 1px solid #000;
-            margin: 2px;
-            text-align: center;
-            line-height: 40px;
-            font-size: 20px;
-            text-transform: uppercase;
-            cursor: pointer;
-        }
-        
-        .letter.green {
-            background-color: #6aaa64;
-            color: white;
-        }
-        
-        .letter.yellow {
-            background-color: #c9b458;
-            color: white;
-        }
-        
-        #guessInput {
-            width: 200px;
-            padding: 8px;
-            font-size: 16px;
-            text-transform: uppercase;
-        }
-        
-        button {
-            padding: 8px 16px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        #roomIdDisplay {
-            font-weight: bold;
-            font-size: 18px;
-            margin: 10px 0;
-        }
-        
-        .playerStatus {
-            margin: 10px 0;
-        }
-        
-        #gameOverModal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .modalContent {
-            background-color: white;
-            padding: 20px;
-            border-radius: 5px;
-            text-align: center;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Wordly Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    #lobby, #game {
+      text-align: center;
+    }
+    button, input {
+      padding: 8px 15px;
+      margin: 5px;
+      font-size: 16px;
+    }
+    .game-container {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+    }
+    .game-section {
+      width: 48%;
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 5px;
+    }
+    .letter {
+      display: inline-block;
+      width: 30px;
+      height: 30px;
+      margin: 3px;
+      text-align: center;
+      line-height: 30px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      user-select: none;
+    }
+    .green {
+      background-color: #6aaa64;
+      color: white;
+    }
+    .yellow {
+      background-color: #c9b458;
+      color: white;
+    }
+    .gray {
+      background-color: #787c7e;
+      color: white;
+    }
+    #guessHistory {
+      margin-top: 20px;
+    }
+    #opponentGuess {
+      margin-top: 10px;
+    }
+    #submitEvaluation {
+      margin-top: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
 <body>
-    <div id="lobbyScreen" class="screen active">
-        <h1>Wordly Game</h1>
-        <button id="createRoomBtn">Create Room</button>
-        <p>or</p>
-        <input type="text" id="roomIdInput" placeholder="Enter Room ID">
-        <button id="joinRoomBtn">Join Room</button>
-    </div>
-    
-    <div id="wordInputScreen" class="screen">
-        <h1>Enter Your Word</h1>
-        <p>Room ID: <span id="roomIdDisplay"></span></p>
-        <div class="playerStatus" id="player1Status">Player 1: Not Ready</div>
-        <div class="playerStatus" id="player2Status">Player 2: Not Ready</div>
-        <input type="text" id="wordInput" maxlength="5" placeholder="5-letter word">
-        <button id="submitWordBtn">Submit Word</button>
-        <button id="startGameBtn" disabled>Play Game</button>
-    </div>
-    
-    <div id="gameScreen" class="screen">
-        <div id="gameContainer">
-            <div class="gameHalf">
-                <h2>Your Guess</h2>
-                <div class="guessArea">
-                    <input type="text" id="guessInput" maxlength="5" placeholder="Your guess">
-                    <button id="submitGuessBtn">Submit</button>
-                </div>
-                <div id="yourGuesses"></div>
-            </div>
-            
-            <div class="gameHalf">
-                <h2>Opponent's Guess</h2>
-                <div id="opponentGuessArea">
-                    <p>Waiting for opponent's guess...</p>
-                </div>
-                <div id="feedbackArea" style="display: none;">
-                    <p>Mark the letters:</p>
-                    <div id="feedbackLetters"></div>
-                    <button id="submitFeedbackBtn">Submit Feedback</button>
-                </div>
-                <div id="opponentGuesses"></div>
-            </div>
+  <div id="lobby">
+    <h1>Wordly Game</h1>
+    <button id="createRoom">Create Room</button>
+    <p>or</p>
+    <input type="text" id="roomIdInput" placeholder="Enter Room ID" />
+    <button id="joinRoom">Join Room</button>
+  </div>
+  
+  <div id="game" class="hidden">
+    <div class="game-container">
+      <div class="game-section">
+        <h2>Your Guessing Area</h2>
+        <div id="guessSection" class="hidden">
+          <input type="text" id="guessInput" maxlength="5" placeholder="Enter your guess" />
+          <button id="submitGuess">Submit Guess</button>
+          <div id="guessHistory"></div>
         </div>
-    </div>
-    
-    <div id="gameOverModal">
-        <div class="modalContent">
-            <h2 id="gameOverTitle">Game Over</h2>
-            <p id="gameOverMessage"></p>
-            <p>Your word: <span id="yourWordResult"></span></p>
-            <p>Opponent's word: <span id="opponentWordResult"></span></p>
-            <button id="playAgainBtn">Play Again</button>
+      </div>
+      
+      <div class="game-section">
+        <h2>Evaluation Area</h2>
+        <div id="wordSubmission">
+          <input type="text" id="secretWord" maxlength="5" placeholder="Enter your word" />
+          <button id="submitWord">Submit Word</button>
         </div>
+        <div id="evaluationSection" class="hidden">
+          <p>Opponent's guess:</p>
+          <div id="opponentGuess"></div>
+          <button id="submitEvaluation">Submit Evaluation</button>
+        </div>
+      </div>
     </div>
-    
-    <script>
-        const socket = new WebSocket(`ws://${window.location.host}`);
-        
-        let playerId;
-        let roomId;
-        let currentWord;
-        let isMyTurn = false;
-        let currentGuessForFeedback;
-        let guesserIdForFeedback;
-        
-        // DOM elements
-        const lobbyScreen = document.getElementById('lobbyScreen');
-        const wordInputScreen = document.getElementById('wordInputScreen');
-        const gameScreen = document.getElementById('gameScreen');
-        const gameOverModal = document.getElementById('gameOverModal');
-        
-        const createRoomBtn = document.getElementById('createRoomBtn');
-        const joinRoomBtn = document.getElementById('joinRoomBtn');
-        const roomIdInput = document.getElementById('roomIdInput');
-        const roomIdDisplay = document.getElementById('roomIdDisplay');
-        const wordInput = document.getElementById('wordInput');
-        const submitWordBtn = document.getElementById('submitWordBtn');
-        const startGameBtn = document.getElementById('startGameBtn');
-        const player1Status = document.getElementById('player1Status');
-        const player2Status = document.getElementById('player2Status');
-        
-        const guessInput = document.getElementById('guessInput');
-        const submitGuessBtn = document.getElementById('submitGuessBtn');
-        const yourGuesses = document.getElementById('yourGuesses');
-        
-        const opponentGuessArea = document.getElementById('opponentGuessArea');
-        const feedbackArea = document.getElementById('feedbackArea');
-        const feedbackLetters = document.getElementById('feedbackLetters');
-        const submitFeedbackBtn = document.getElementById('submitFeedbackBtn');
-        const opponentGuesses = document.getElementById('opponentGuesses');
-        
-        const gameOverTitle = document.getElementById('gameOverTitle');
-        const gameOverMessage = document.getElementById('gameOverMessage');
-        const yourWordResult = document.getElementById('yourWordResult');
-        const opponentWordResult = document.getElementById('opponentWordResult');
-        const playAgainBtn = document.getElementById('playAgainBtn');
-        
-        // Event listeners
-        createRoomBtn.addEventListener('click', () => {
-            socket.send(JSON.stringify({ type: 'createRoom' }));
-        });
-        
-        joinRoomBtn.addEventListener('click', () => {
-            const roomId = roomIdInput.value.trim();
-            if (roomId) {
-                socket.send(JSON.stringify({ type: 'joinRoom', roomId }));
-            }
-        });
-        
-        submitWordBtn.addEventListener('click', () => {
-            const word = wordInput.value.trim();
-            if (word.length === 5) {
-                currentWord = word.toUpperCase();
-                socket.send(JSON.stringify({ type: 'setWord', word }));
-                submitWordBtn.disabled = true;
-                wordInput.disabled = true;
-            }
-        });
-        
-        startGameBtn.addEventListener('click', () => {
-            switchScreen('gameScreen');
-        });
-        
-        submitGuessBtn.addEventListener('click', () => {
-            const guess = guessInput.value.trim();
-            if (guess.length === 5 && isMyTurn) {
-                socket.send(JSON.stringify({ type: 'submitGuess', guess }));
-                guessInput.value = '';
-            }
-        });
-        
-        submitFeedbackBtn.addEventListener('click', () => {
-            const letters = Array.from(feedbackLetters.children);
-            const feedback = {
-                guess: currentGuessForFeedback,
-                colors: letters.map(letter => {
-                    if (letter.classList.contains('green')) return 'green';
-                    if (letter.classList.contains('yellow')) return 'yellow';
-                    return 'none';
-                })
-            };
-            
-            socket.send(JSON.stringify({ type: 'submitFeedback', feedback }));
-            
-            // Reset feedback UI
-            feedbackArea.style.display = 'none';
-            opponentGuessArea.innerHTML = '<p>Waiting for opponent\'s guess...</p>';
-        });
-        
-        playAgainBtn.addEventListener('click', () => {
-            gameOverModal.style.display = 'none';
-            resetGame();
-        });
-        
-        // Input validation
-        wordInput.addEventListener('input', () => {
-            wordInput.value = wordInput.value.replace(/[^a-zA-Z]/g, '').slice(0, 5);
-        });
-        
-        guessInput.addEventListener('input', () => {
-            guessInput.value = guessInput.value.replace(/[^a-zA-Z]/g, '').slice(0, 5);
-        });
-        
-        // WebSocket message handling
-        socket.addEventListener('message', (event) => {
-            const data = JSON.parse(event.data);
-            console.log('Received:', data);
-            
-            switch (data.type) {
-                case 'connection':
-                    playerId = data.playerId;
-                    break;
-                    
-                case 'roomCreated':
-                    roomId = data.roomId;
-                    roomIdDisplay.textContent = data.roomId;
-                    switchScreen('wordInputScreen');
-                    player1Status.textContent = `You (Player 1): Not Ready`;
-                    player2Status.textContent = `Player 2: Not Connected`;
-                    break;
-                    
-                case 'joinError':
-                    alert(data.message);
-                    break;
-                    
-                case 'playerJoined':
-                    roomId = data.roomId;
-                    roomIdDisplay.textContent = data.roomId;
-                    switchScreen('wordInputScreen');
-                    
-                    // Update player statuses
-                    data.players.forEach(player => {
-                        if (player.id === playerId) {
-                            player1Status.textContent = `You (Player ${data.players.indexOf(player) + 1}): ${player.isReady ? 'Ready' : 'Not Ready'}`;
-                        } else {
-                            player2Status.textContent = `Player ${data.players.indexOf(player) + 1}: ${player.isReady ? 'Ready' : 'Not Ready'}`;
-                        }
-                    });
-                    break;
-                    
-                case 'playerReady':
-                    // Update player status
-                    if (data.playerId === playerId) {
-                        player1Status.textContent = player1Status.textContent.replace('Not Ready', 'Ready');
-                    } else {
-                        player2Status.textContent = player2Status.textContent.replace('Not Ready', 'Ready');
-                    }
-                    
-                    // Enable start game button if both ready
-                    startGameBtn.disabled = !data.allReady;
-                    break;
-                    
-                case 'gameStarted':
-                    isMyTurn = data.yourTurn;
-                    updateTurnUI();
-                    break;
-                    
-                case 'receiveGuess':
-                    // Show the guess and allow providing feedback
-                    currentGuessForFeedback = data.guess;
-                    guesserIdForFeedback = data.guesserId;
-                    
-                    opponentGuessArea.innerHTML = '';
-                    feedbackLetters.innerHTML = '';
-                    
-                    const guessLetters = data.guess.split('');
-                    guessLetters.forEach((letter, index) => {
-                        const letterElement = document.createElement('div');
-                        letterElement.className = 'letter';
-                        letterElement.textContent = letter;
-                        letterElement.dataset.index = index;
-                        
-                        letterElement.addEventListener('click', () => {
-                            if (!letterElement.classList.contains('green')) {
-                                if (!letterElement.classList.contains('yellow')) {
-                                    // First click - green
-                                    letterElement.classList.add('green');
-                                } else {
-                                    // Second click - remove yellow
-                                    letterElement.classList.remove('yellow');
-                                }
-                            } else {
-                                // Second click - change to yellow
-                                letterElement.classList.remove('green');
-                                letterElement.classList.add('yellow');
-                            }
-                        });
-                        
-                        feedbackLetters.appendChild(letterElement);
-                    });
-                    
-                    feedbackArea.style.display = 'block';
-                    break;
-                    
-                case 'receiveFeedback':
-                    // Show feedback on your guess
-                    addGuessToHistory(data.feedback, currentGuessForFeedback, true, data.isCorrect);
-                    
-                    if (data.isCorrect) {
-                        // You won!
-                        showGameOver(true);
-                    } else {
-                        // Now it's your turn again
-                        isMyTurn = true;
-                        updateTurnUI();
-                    }
-                    break;
-                    
-                case 'showGuess':
-                    // Show the guess in history
-                    if (data.isOpponent) {
-                        // This is your feedback on opponent's guess
-                        addGuessToHistory(data.feedback, data.guess, false, false);
-                    } else {
-                        // This is your own guess
-                        addGuessToHistory(null, data.guess, true, false);
-                    }
-                    break;
-                    
-                case 'yourTurn':
-                    isMyTurn = true;
-                    updateTurnUI();
-                    break;
-                    
-                case 'gameOver':
-                    showGameOver(data.winnerId === playerId, data.winnerWord, data.loserWord);
-                    break;
-                    
-                case 'opponentDisconnected':
-                    alert('Your opponent has disconnected. Returning to lobby.');
-                    resetGame();
-                    break;
-            }
-        });
-        
-        // Helper functions
-        function switchScreen(screenName) {
-            document.querySelectorAll('.screen').forEach(screen => {
-                screen.classList.remove('active');
-            });
-            document.getElementById(screenName).classList.add('active');
-        }
-        
-        function updateTurnUI() {
-            if (isMyTurn) {
-                guessInput.disabled = false;
-                submitGuessBtn.disabled = false;
-                guessInput.focus();
-            } else {
-                guessInput.disabled = true;
-                submitGuessBtn.disabled = true;
-            }
-        }
-        
-        function addGuessToHistory(feedback, guess, isOwnGuess, isCorrect) {
-            const container = isOwnGuess ? yourGuesses : opponentGuesses;
-            const guessElement = document.createElement('div');
-            guessElement.className = 'guess';
-            
-            const guessLetters = guess.split('');
-            guessLetters.forEach((letter, index) => {
-                const letterElement = document.createElement('div');
-                letterElement.className = 'letter';
-                letterElement.textContent = letter;
-                
-                if (feedback && feedback[index] === 'green') {
-                    letterElement.classList.add('green');
-                } else if (feedback && feedback[index] === 'yellow') {
-                    letterElement.classList.add('yellow');
-                }
-                
-                guessElement.appendChild(letterElement);
-            });
-            
-            if (isCorrect) {
-                const correctText = document.createElement('p');
-                correctText.textContent = 'Correct!';
-                correctText.style.color = 'green';
-                guessElement.appendChild(correctText);
-            }
-            
-            container.appendChild(guessElement);
-        }
-        
-        function showGameOver(didWin, winnerWord, loserWord) {
-            gameOverModal.style.display = 'flex';
-            
-            if (didWin) {
-                gameOverTitle.textContent = 'You Won!';
-                gameOverMessage.textContent = 'Congratulations, you guessed the word correctly!';
-            } else {
-                gameOverTitle.textContent = 'You Lost';
-                gameOverMessage.textContent = 'Your opponent guessed the word first.';
-            }
-            
-            yourWordResult.textContent = currentWord;
-            opponentWordResult.textContent = didWin ? loserWord : winnerWord;
-        }
-        
-        function resetGame() {
-            // Clear game state
-            currentWord = null;
-            isMyTurn = false;
-            currentGuessForFeedback = null;
-            guesserIdForFeedback = null;
-            
-            // Clear UI
-            yourGuesses.innerHTML = '';
-            opponentGuesses.innerHTML = '';
-            opponentGuessArea.innerHTML = '<p>Waiting for opponent\'s guess...</p>';
-            feedbackArea.style.display = 'none';
-            guessInput.value = '';
-            wordInput.value = '';
-            submitWordBtn.disabled = false;
-            wordInput.disabled = false;
-            startGameBtn.disabled = true;
-            
-            // Go back to lobby
-            switchScreen('lobbyScreen');
-        }
-    </script>
+    <div id="gameStatus"></div>
+  </div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
 </body>
 </html>
